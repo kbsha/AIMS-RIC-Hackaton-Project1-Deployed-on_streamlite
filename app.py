@@ -1,94 +1,196 @@
 import streamlit as st
-from pricer import Product, suggest_price, freshness_factor
 import pandas as pd
+import numpy as np
+import joblib
 
-st.set_page_config(page_title="Dynamic Pricing Engine", layout="centered")
-
-st.title("📊 AIMS-RIC Perishable Goods Dynamic Pricing")
-
-# -------------------------
-# INPUT SECTION
-# -------------------------
-st.header("🔧 Input Parameters")
-
-cost = st.number_input("Cost (UGX)", 100, 10000, 1000)
-shelf_life = st.number_input("Shelf Life (days)", 1, 30, 7)
-age = st.slider("Current Age (days)", 0.0, float(shelf_life), 2.0)
-
-p_ref = st.number_input("Reference Price", 100, 10000, 1800)
-Q0 = st.number_input("Base Demand (Q0)", 1, 500, 50)
-alpha = st.slider("Price Sensitivity (alpha)", 0.1, 3.0, 1.5)
-
-competitors_input = st.text_input(
-    "Competitor Prices (comma-separated)",
-    "1600,1700,1900"
+from pricer import (
+    Product,
+    suggest_price,
+    freshness_factor,
+    format_sms,
+    simulate_7_days
 )
 
-competitors = [float(x.strip()) for x in competitors_input.split(",")]
+# -----------------------------
+# LOAD TRAINED ML MODEL
+# -----------------------------
+ml_model = joblib.load("demand_model.pkl")
 
-# -------------------------
-# COMPUTE PRICE
-# -------------------------
+def ml_predict(price, age_hours, comp_avg, product_encoded):
+    X = pd.DataFrame([[
+        price,
+        age_hours,
+        comp_avg,
+        product_encoded
+    ]], columns=["price", "age_hours", "comp_avg_price", "product_encoded"])
+
+    return ml_model.predict(X)[0]
+
+# -----------------------------
+# PAGE CONFIG
+# -----------------------------
+st.set_page_config(page_title="AI Hybrid Pricing Engine", layout="wide")
+
+st.title("🧠 AI Hybrid Retail Pricing System")
+st.markdown("Rule-based + Machine Learning Dynamic Pricing Engine")
+
+# -----------------------------
+# SIDEBAR INPUTS
+# -----------------------------
+st.sidebar.header("📦 Product Configuration")
+
+sku = st.sidebar.text_input("Product SKU", "TOMATO-A")
+cost = st.sidebar.number_input("Cost (RWF)", 500, 10000, 1000)
+shelf_life = st.sidebar.number_input("Shelf Life (days)", 1, 14, 7)
+
+p_ref = st.sidebar.number_input("Reference Price", 1000, 10000, 1800)
+Q0 = st.sidebar.number_input("Base Demand (Q0)", 10, 500, 50)
+alpha = st.sidebar.slider("Price Sensitivity (alpha)", 0.1, 5.0, 1.5)
+
+age = st.sidebar.slider("Product Age (days)", 0.0, float(shelf_life), 3.0)
+
+# Competitors
+comp1 = st.sidebar.number_input("Competitor 1", 1000, 10000, 1600)
+comp2 = st.sidebar.number_input("Competitor 2", 1000, 10000, 1700)
+comp3 = st.sidebar.number_input("Competitor 3", 1000, 10000, 1900)
+
+competitors = [comp1, comp2, comp3]
+
+# -----------------------------
+# PRODUCT OBJECT
+# -----------------------------
 product = Product(
-    sku="PRODUCT",
+    sku=sku,
     cost=cost,
     shelf_life_days=shelf_life,
     p_ref=p_ref,
     Q0=Q0,
-    alpha=alpha,
+    alpha=alpha
 )
 
-if st.button("💰 Suggest Price"):
-    result = suggest_price(product, age, competitors)
+# -----------------------------
+# RULE-BASED RESULT
+# -----------------------------
+result = suggest_price(product, age, competitors)
 
-    st.success(f"Recommended Price: {result['suggested_price']} UGX")
-    st.write(f"Freshness: {result['freshness']:.3f}")
-    st.write(f"Status: {result['freshness_label']}")
-    st.write(f"Margin: {result['margin_pct']:.1f}%")
+# -----------------------------
+# DISPLAY METRICS
+# -----------------------------
+col1, col2, col3 = st.columns(3)
 
-    if result["freshness"] < 0.3:
-        st.warning("⚠️ Sell fast! Product near expiry")
+with col1:
+    st.metric("🧊 Freshness", f"{result['freshness']:.3f}")
+    st.write(result["freshness_label"])
 
-# -------------------------
+with col2:
+    st.metric("💰 Rule Price", f"{result['suggested_price']:.0f} RWF")
+
+with col3:
+    st.metric("📈 Margin %", f"{result['margin_pct']:.1f}%")
+
+st.divider()
+
+# -----------------------------
+# SMS OUTPUT
+# -----------------------------
+st.subheader("📲 SMS Output")
+st.code(format_sms(result, "RWF"))
+
+# -----------------------------
 # FRESHNESS CURVE
-# -------------------------
-st.header("📉 Freshness Curve")
+# -----------------------------
+st.subheader("📉 Freshness Decay Curve")
 
-days = list(range(0, int(shelf_life)+1))
-sigmoid = [freshness_factor(d, shelf_life) for d in days]
-linear = [max(0, 1 - d / shelf_life) for d in days]
+days = np.linspace(0, shelf_life, 50)
+values = [freshness_factor(d, shelf_life) for d in days]
 
-df = pd.DataFrame({
+df_curve = pd.DataFrame({
     "Day": days,
-    "Sigmoid": sigmoid,
-    "Linear": linear
+    "Freshness": values
 })
 
-st.line_chart(df.set_index("Day"))
+st.line_chart(df_curve.set_index("Day"))
 
-# -------------------------
-# DEMO TABLE
-# -------------------------
-st.header("📊 Price Evolution")
+# -----------------------------
+# COMPETITOR VIEW
+# -----------------------------
+st.subheader("🏪 Market Comparison")
 
-demo_data = []
-for d in [0, 2, shelf_life/2, shelf_life-1]:
-    res = suggest_price(product, d, competitors)
-    demo_data.append({
-        "Day": d,
-        "Price": res["suggested_price"],
-        "Freshness": round(res["freshness"], 3),
-        "Label": res["freshness_label"]
-    })
+df_comp = pd.DataFrame({
+    "Entity": ["Competitor 1", "Competitor 2", "Competitor 3", "YOU (Rule)"],
+    "Price (RWF)": [comp1, comp2, comp3, result["suggested_price"]]
+})
 
-st.table(pd.DataFrame(demo_data))
+st.dataframe(df_comp)
 
-# -------------------------
-# SMS OUTPUT
-# -------------------------
-st.header("📱 SMS Output")
+# -----------------------------
+# ML VS RULE COMPARISON
+# -----------------------------
+st.subheader("⚖️ Rule Engine vs ML Model")
 
-if st.button("Generate SMS"):
-    res = suggest_price(product, age, competitors)
-    sms = f"{product.sku} {int(res['suggested_price'])} UGX | SELL FAST"
-    st.code(sms)
+comp_avg = np.mean(competitors)
+product_encoded = 0
+
+rule_profit = result["expected_daily_profit"]
+
+ml_demand = ml_predict(
+    result["suggested_price"],
+    age * 24,
+    comp_avg,
+    product_encoded
+)
+
+ml_profit = (result["suggested_price"] - cost) * ml_demand
+
+col1, col2 = st.columns(2)
+
+with col1:
+    st.metric("📏 Rule Profit", f"{rule_profit:.2f} RWF")
+
+with col2:
+    st.metric("🤖 ML Profit", f"{ml_profit:.2f} RWF")
+
+# -----------------------------
+# PROFIT CURVE COMPARISON
+# -----------------------------
+st.subheader("📊 Profit Curve Comparison")
+
+prices = np.linspace(500, 5000, 30)
+
+ml_profits = []
+rule_profits = []
+
+for p in prices:
+    ml_d = ml_predict(p, age * 24, comp_avg, product_encoded)
+    ml_profits.append((p - cost) * ml_d)
+
+    rule_profits.append(result["expected_daily_profit"])
+
+df_compare = pd.DataFrame({
+    "Price": prices,
+    "ML_Profit": ml_profits,
+    "Rule_Profit": rule_profits
+})
+
+st.line_chart(df_compare.set_index("Price"))
+
+# -----------------------------
+# 7-DAY SIMULATION
+# -----------------------------
+st.subheader("📊 7-Day Simulation")
+
+if st.button("Run Simulation"):
+
+    sim = simulate_7_days(product, competitors)
+    df_sim = pd.DataFrame(sim)
+
+    if "day" in df_sim.columns:
+        st.line_chart(df_sim.set_index("day")[["our_price", "demand"]])
+
+    st.dataframe(df_sim)
+
+# -----------------------------
+# FOOTER
+# -----------------------------
+st.markdown("---")
+st.markdown("⚡ Hybrid AI Pricing System — Rule Engine + Machine Learning | AIMS-RIC Hackathon")
