@@ -4,7 +4,7 @@ import pandas as pd
 
 st.set_page_config(page_title="Dynamic Pricing Engine", layout="centered")
 
-st.title("📊 Perishable Goods Dynamic Pricing")
+st.title("📊 AIMS-RIC Perishable Goods Dynamic Pricing")
 
 # -------------------------
 # INPUT SECTION
