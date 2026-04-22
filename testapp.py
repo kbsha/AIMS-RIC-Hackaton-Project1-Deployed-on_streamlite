@@ -19,7 +19,7 @@ st.set_page_config(
 )
 
 st.title("🧠 AI Freshness-Based Pricing Engine")
-st.markdown("Dynamic pricing system for perishable goods (Uganda market simulation)")
+st.markdown("Dynamic pricing system for perishable goods (Rwanda market simulation)")
 
 # -----------------------------
 # SIDEBAR INPUTS
@@ -27,7 +27,7 @@ st.markdown("Dynamic pricing system for perishable goods (Uganda market simulati
 st.sidebar.header("📦 Product Configuration")
 
 sku = st.sidebar.text_input("Product SKU", "TOMATO-A")
-cost = st.sidebar.number_input("Cost (UGX)", 500, 10000, 1000)
+cost = st.sidebar.number_input("Cost (RWF)", 500, 10000, 1000)
 shelf_life = st.sidebar.number_input("Shelf Life (days)", 1, 14, 7)
 
 p_ref = st.sidebar.number_input("Reference Price", 1000, 10000, 1800)
@@ -68,7 +68,7 @@ with col1:
     st.write(result["freshness_label"])
 
 with col2:
-    st.metric("💰 Suggested Price", f"{result['suggested_price']:.0f} UGX")
+    st.metric("💰 Suggested Price", f"{result['suggested_price']:.0f} RWF")
 
 with col3:
     st.metric("📈 Margin %", f"{result['margin_pct']:.1f}%")
@@ -79,7 +79,7 @@ st.divider()
 # SMS OUTPUT
 # -----------------------------
 st.subheader("📲 Farmer SMS Output")
-sms = format_sms(result, "UGX")
+sms = format_sms(result, "RWF")
 st.code(sms)
 
 # -----------------------------
@@ -115,7 +115,7 @@ st.subheader("🏪 Market Comparison")
 
 df_comp = pd.DataFrame({
     "Entity": ["Competitor 1", "Competitor 2", "Competitor 3", "YOU"],
-    "Price (UGX)": [comp1, comp2, comp3, result["suggested_price"]]
+    "Price (RWF)": [comp1, comp2, comp3, result["suggested_price"]]
 })
 
 st.dataframe(df_comp)
@@ -153,4 +153,4 @@ if st.button("Run Simulation"):
 # FOOTER
 # -----------------------------
 st.markdown("---")
-st.markdown("⚡ Built for Hackathon: AI Dynamic Pricing Engine")
+st.markdown("⚡ Built by Kibremoges Fenta for AIMS-RIC Hackathon: AI Dynamic Pricing Engine")
